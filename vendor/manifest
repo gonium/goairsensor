@@ -1,0 +1,19 @@
+{
+	"version": 0,
+	"dependencies": [
+		{
+			"importpath": "github.com/kylelemons/gousb/usb",
+			"repository": "https://github.com/kylelemons/gousb",
+			"revision": "b8ca4aadc7228a359fccd8ae4394eefcce29e7a8",
+			"branch": "master",
+			"path": "/usb"
+		},
+		{
+			"importpath": "github.com/kylelemons/gousb/usbid",
+			"repository": "https://github.com/kylelemons/gousb",
+			"revision": "b8ca4aadc7228a359fccd8ae4394eefcce29e7a8",
+			"branch": "master",
+			"path": "/usbid"
+		}
+	]
+}
