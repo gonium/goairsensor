@@ -25,7 +25,7 @@ import (
 )
 
 var (
-	device   = flag.String("device", "vend:prod", "Device to which to connect")
+	device   = flag.String("device", "03eb:2013", "Device to which to connect")
 	config   = flag.Int("config", 1, "Endpoint to which to connect")
 	iface    = flag.Int("interface", 0, "Endpoint to which to connect")
 	setup    = flag.Int("setup", 0, "Endpoint to which to connect")
