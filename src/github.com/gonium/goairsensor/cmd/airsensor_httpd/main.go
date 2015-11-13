@@ -18,10 +18,9 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
-
 	"github.com/kylelemons/gousb/usb"
 	"github.com/kylelemons/gousb/usbid"
+	"log"
 )
 
 var (
@@ -100,5 +99,15 @@ func main() {
 	if err != nil {
 		log.Fatalf("open: %s", err)
 	}
-	_ = ep
+	log.Printf("Got Endpoint: %#v", ep)
+
+	var buf []byte
+
+	// Read invalid bytes from device
+	num, err := ep.Read(buf)
+	if err != nil {
+		log.Fatal("Failed to read pending bytes into buffer")
+	}
+	log.Printf("Read %d bytes into temporary buffer", num)
+
 }
