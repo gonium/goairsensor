@@ -16,8 +16,11 @@
 package main
 
 import (
+	"bytes"
+	"encoding/binary"
 	"flag"
 	"fmt"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/kylelemons/gousb/usb"
 	"github.com/kylelemons/gousb/usbid"
 	"log"
@@ -31,6 +34,12 @@ var (
 	endpoint = flag.Int("endpoint", 1, "Endpoint to which to connect")
 	debug    = flag.Int("debug", 3, "Debug level for libusb")
 )
+
+func read_le_int16(data []byte) (ret int16) {
+	buf := bytes.NewBuffer(data)
+	binary.Read(buf, binary.LittleEndian, &ret)
+	return
+}
 
 func main() {
 	flag.Parse()
@@ -65,7 +74,7 @@ func main() {
 					fmt.Printf("    %s\n", iface)
 					fmt.Printf("      %s\n", usbid.Classify(iface))
 					for _, end := range iface.Endpoints {
-						fmt.Printf("      %s\n", end)
+						fmt.Printf("      %v\n", end)
 					}
 				}
 			}
@@ -93,18 +102,58 @@ func main() {
 
 	dev := devs[0]
 
-	log.Printf("Connecting to endpoint...")
-	log.Printf("- %#v", dev.Descriptor)
-	ep, err := dev.OpenEndpoint(uint8(*config), uint8(*iface), uint8(*setup), uint8(*endpoint)|uint8(usb.ENDPOINT_DIR_IN))
+	log.Printf("Connecting to endpoint: ")
+	spew.Dump(dev.Descriptor)
+	ep_read, err := dev.OpenEndpoint(uint8(*config), uint8(*iface),
+		uint8(*setup), uint8(1)|uint8(usb.ENDPOINT_DIR_IN))
 	if err != nil {
-		log.Fatalf("open: %s", err)
+		log.Fatalf("Failed to open read endpoint: %s", err)
 	}
-	log.Printf("Got Endpoint: %#v", ep)
+	log.Printf("Got read endpoint: ")
+	spew.Dump(ep_read)
+
+	ep_write, err := dev.OpenEndpoint(uint8(*config), uint8(*iface),
+		uint8(*setup), uint8(2)|uint8(usb.ENDPOINT_DIR_OUT))
+	if err != nil {
+		log.Fatalf("Failed to open write endpoint: %s", err)
+	}
+	log.Printf("Got write endpoint: ")
+	spew.Dump(ep_write)
 
 	var buf []byte
-
 	// Read invalid bytes from device
-	num, err := ep.Read(buf)
+	num, err := ep_read.Read(buf)
+	if err != nil {
+		log.Fatal("Failed to read pending bytes into buffer")
+	}
+	log.Printf("Read %d bytes into temporary buffer", num)
+
+	// request data step 1: send request command
+	buf = []byte("\x40\x68\x2a\x54\x52\x0a\x40\x40\x40\x40\x40\x40\x40\x40\x40\x40")
+	num, err = ep_write.Write(buf)
+	if err != nil {
+		log.Fatalf("Failed to write request command: %s", err)
+	}
+	spew.Printf("Request data - wrote %d bytes: % x\n", num, buf)
+
+	// request data step 2: read response
+	num, err = ep_read.Read(buf)
+	if err != nil {
+		log.Fatal("Failed to read pending bytes into buffer")
+	}
+	spew.Printf("Response data - read %d bytes: % x\n", num, buf)
+	spew.Dump(buf[2:4])
+	voc := read_le_int16(buf[2:4])
+	// check voc range - sensor docs says between 450 and 2000.
+	// everything else is garbage.
+	if (voc >= 450) && (voc <= 2000) {
+		log.Printf("VOC concentration: %d ppm CO2-equivalent", voc)
+	} else {
+		log.Printf("ERROR: invalid value %d received", voc)
+	}
+
+	//request data step 3: flush
+	num, err = ep_read.Read(buf)
 	if err != nil {
 		log.Fatal("Failed to read pending bytes into buffer")
 	}
