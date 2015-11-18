@@ -15,15 +15,22 @@
 // rawread attempts to read from the specified USB device.
 package main
 
+///*
+//#cgo pkg-config: libusb
+//#include <libusb-1.0/libusb.h>
+//*/
+//import "C"
+
 import (
 	"bytes"
 	"encoding/binary"
 	"flag"
 	"fmt"
+	"github.com/2sidedfigure/gousb/usb"
 	"github.com/davecgh/go-spew/spew"
-	"github.com/kylelemons/gousb/usb"
-	"github.com/kylelemons/gousb/usbid"
+	//	"github.com/kylelemons/gousb/usbid"
 	"log"
+	"time"
 )
 
 var (
@@ -40,6 +47,40 @@ func read_le_int16(data []byte) (ret int16) {
 	binary.Read(buf, binary.LittleEndian, &ret)
 	return
 }
+
+//// copied from: https://github.com/2sidedfigure/gousb/commit/4e9aa858e284be9be2aea781d8bfccb97c4a4285
+//// detachKernelDriver detaches any active kernel drivers, if supported by the platform.
+//// If there are any errors, like Context.ListDevices, only the final one will be returned.
+//func (d *usb.Device) detachKernelDriver() (err error) {
+//	for _, cfg := range d.Configs {
+//		for _, iface := range cfg.Interfaces {
+//			switch activeErr := C.libusb_kernel_driver_active(d.handle, C.int(iface.Number)); activeErr {
+//			case C.LIBUSB_ERROR_NOT_SUPPORTED:
+//				// no need to do any futher checking, no platform support
+//				return
+//			case 0:
+//				continue
+//			case 1:
+//				switch detachErr := C.libusb_detach_kernel_driver(d.handle, C.int(iface.Number)); detachErr {
+//				case C.LIBUSB_ERROR_NOT_SUPPORTED:
+//					// shouldn't ever get here, should be caught by the outer switch
+//					return
+//				case 0:
+//					d.detached[iface.Number]++
+//				case C.LIBUSB_ERROR_NOT_FOUND:
+//					// this status is returned if libusb's driver is already attached to the device
+//					d.detached[iface.Number]++
+//				default:
+//					err = fmt.Errorf("usb: detach kernel driver: %s", detachErr)
+//				}
+//			default:
+//				err = fmt.Errorf("usb: active kernel driver check: %s", activeErr)
+//			}
+//		}
+//	}
+//
+//	return
+//}
 
 func main() {
 	flag.Parse()
@@ -59,7 +100,7 @@ func main() {
 		}
 
 		// The usbid package can be used to print out human readable information.
-		fmt.Printf("  Protocol: %s\n", usbid.Classify(desc))
+		fmt.Printf("  Protocol: %d\n", desc)
 
 		// The configurations can be examined from the Descriptor, though they can only
 		// be set once the device is opened.  All configuration references must be closed,
@@ -72,7 +113,6 @@ func main() {
 				fmt.Printf("    --------------\n")
 				for _, iface := range alt.Setups {
 					fmt.Printf("    %s\n", iface)
-					fmt.Printf("      %s\n", usbid.Classify(iface))
 					for _, end := range iface.Endpoints {
 						fmt.Printf("      %v\n", end)
 					}
@@ -101,19 +141,36 @@ func main() {
 	}
 
 	dev := devs[0]
+	//if err := dev.detachKernelDriver(); err != nil {
+	//	log.Fataln("failed to detach kernel driver: %s", err)
+	//}
+	dev.Reset()
+	dev.ReadTimeout = (1 * time.Second)
+	dev.WriteTimeout = (1 * time.Second)
+	dev.ControlTimeout = (1 * time.Second)
 
-	log.Printf("Connecting to endpoint: ")
+	log.Printf("Using device descriptor: ")
 	spew.Dump(dev.Descriptor)
-	ep_read, err := dev.OpenEndpoint(uint8(*config), uint8(*iface),
-		uint8(*setup), uint8(1)|uint8(usb.ENDPOINT_DIR_IN))
+	//time.Sleep(1 * time.Second)
+
+	//ep_read, err := dev.OpenEndpoint(uint8(*config), uint8(*iface),
+	//	uint8(*setup), uint8(1)|uint8(usb.ENDPOINT_DIR_IN))
+	cfg, err := dev.ActiveConfig()
+	if err != nil {
+		log.Fatalf("Cannot get active config: %s", err)
+	}
+	log.Printf("Selecting config %d, endpoint 0x%x", cfg,
+		uint8(1)|uint8(usb.ENDPOINT_DIR_IN))
+	ep_read, err := dev.OpenEndpoint(cfg, uint8(0),
+		uint8(0), uint8(1)|uint8(usb.ENDPOINT_DIR_IN))
 	if err != nil {
 		log.Fatalf("Failed to open read endpoint: %s", err)
 	}
 	log.Printf("Got read endpoint: ")
 	spew.Dump(ep_read)
 
-	ep_write, err := dev.OpenEndpoint(uint8(*config), uint8(*iface),
-		uint8(*setup), uint8(2)|uint8(usb.ENDPOINT_DIR_OUT))
+	ep_write, err := dev.OpenEndpoint(uint8(*config), uint8(0),
+		uint8(0), uint8(2)|uint8(usb.ENDPOINT_DIR_OUT))
 	if err != nil {
 		log.Fatalf("Failed to open write endpoint: %s", err)
 	}
@@ -152,7 +209,7 @@ func main() {
 		log.Printf("ERROR: invalid value %d received", voc)
 	}
 
-	//request data step 3: flush
+	// request data step 3: flush
 	num, err = ep_read.Read(buf)
 	if err != nil {
 		log.Fatal("Failed to read pending bytes into buffer")
