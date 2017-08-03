@@ -19,11 +19,9 @@ import (
 	"bytes"
 	"encoding/binary"
 	"flag"
-	"fmt"
-	"github.com/2sidedfigure/gousb/usb"
 	"github.com/davecgh/go-spew/spew"
+	"github.com/google/gousb"
 	"log"
-	"time"
 )
 
 var (
@@ -45,90 +43,118 @@ func main() {
 	flag.Parse()
 
 	// Only one context should be needed for an application.  It should always be closed.
-	ctx := usb.NewContext()
+	ctx := gousb.NewContext()
 	defer ctx.Close()
 
 	ctx.Debug(*debug)
 
 	log.Printf("Scanning for device %q...", *device)
 
-	// ListDevices is used to find the devices to open.
-	devs, err := ctx.ListDevices(func(desc *usb.Descriptor) bool {
-		if fmt.Sprintf("%s:%s", desc.Vendor, desc.Product) != *device {
-			return false
-		}
+	//	// ListDevices is used to find the devices to open.
+	//	devs, err := ctx.OpenDevices(func(desc *gousb.DeviceDesc) bool {
+	//		if fmt.Sprintf("%s:%s", desc.Vendor, desc.Product) != *device {
+	//			return false
+	//		}
+	//
+	//		// The usbid package can be used to print out human readable information.
+	//		fmt.Printf("  Protocol: %d\n", desc)
+	//
+	//		// The configurations can be examined from the Descriptor, though they can only
+	//		// be set once the device is opened.  All configuration references must be closed,
+	//		// to free up the memory in libusb.
+	//		for _, cfg := range desc.Configs {
+	//			// This loop just uses more of the built-in and usbid pretty printing to list
+	//			// the USB devices.
+	//			fmt.Printf("  %s:\n", cfg)
+	//			for _, alt := range cfg.Interfaces {
+	//				fmt.Printf("    --------------\n")
+	//				for _, iface := range alt.AltSettings {
+	//					fmt.Printf("    %s\n", iface)
+	//					for _, end := range iface.Endpoints {
+	//						fmt.Printf("      %v\n", end)
+	//					}
+	//				}
+	//			}
+	//			fmt.Printf("    --------------\n")
+	//		}
+	//
+	//		return true
+	//	})
+	//
+	//	// All Devices returned from ListDevices must be closed.
+	//	defer func() {
+	//		for _, d := range devs {
+	//			d.Close()
+	//		}
+	//	}()
+	//
+	//	// ListDevices can occaionally fail, so be sure to check its return value.
+	//	if err != nil {
+	//		log.Fatalf("list: %s", err)
+	//	}
+	//
+	//	if len(devs) == 0 {
+	//		log.Fatalf("no devices found")
+	//	}
+	//
+	//	dev := devs[0]
+	//	dev.Reset()
+	//	//dev.ReadTimeout = (1 * time.Second)
+	//	//dev.WriteTimeout = (1 * time.Second)
+	//	//dev.ControlTimeout = (1 * time.Second)
+	//
+	//	//log.Printf("Using device descriptor: ")
+	//	//spew.Dump(dev.Descriptor)
+	//
+	//	cfg, err := dev.ActiveConfig()
+	//	if err != nil {
+	//		log.Fatalf("Cannot get active config: %s", err)
+	//	}
+	//	log.Printf("Selecting config %d, endpoint 0x%x", cfg,
+	//		uint8(1)|uint8(gousb.ENDPOINT_DIR_IN))
+	//	ep_read, err := dev.OpenEndpoint(cfg, uint8(0),
+	//		uint8(0), uint8(1)|uint8(gousb.ENDPOINT_DIR_IN))
+	//	if err != nil {
+	//		log.Fatalf("Failed to open read endpoint: %s", err)
+	//	}
+	//	log.Printf("Got read endpoint: ")
+	//	spew.Dump(ep_read)
+	//
+	//	ep_write, err := dev.OpenEndpoint(uint8(*config), uint8(0),
+	//		uint8(0), uint8(2)|uint8(gousb.ENDPOINT_DIR_OUT))
+	//	if err != nil {
+	//		log.Fatalf("Failed to open write endpoint: %s", err)
+	//	}
+	//	log.Printf("Got write endpoint: ")
+	//	spew.Dump(ep_write)
 
-		// The usbid package can be used to print out human readable information.
-		fmt.Printf("  Protocol: %d\n", desc)
-
-		// The configurations can be examined from the Descriptor, though they can only
-		// be set once the device is opened.  All configuration references must be closed,
-		// to free up the memory in libusb.
-		for _, cfg := range desc.Configs {
-			// This loop just uses more of the built-in and usbid pretty printing to list
-			// the USB devices.
-			fmt.Printf("  %s:\n", cfg)
-			for _, alt := range cfg.Interfaces {
-				fmt.Printf("    --------------\n")
-				for _, iface := range alt.Setups {
-					fmt.Printf("    %s\n", iface)
-					for _, end := range iface.Endpoints {
-						fmt.Printf("      %v\n", end)
-					}
-				}
-			}
-			fmt.Printf("    --------------\n")
-		}
-
-		return true
-	})
-
-	// All Devices returned from ListDevices must be closed.
-	defer func() {
-		for _, d := range devs {
-			d.Close()
-		}
-	}()
-
-	// ListDevices can occaionally fail, so be sure to check its return value.
+	// Open any device with a given VID/PID using a convenience function.
+	dev, err := ctx.OpenDeviceWithVIDPID(0x03eb, 0x2013)
 	if err != nil {
-		log.Fatalf("list: %s", err)
+		log.Fatalf("Could not open a device: %v", err)
 	}
+	defer dev.Close()
 
-	if len(devs) == 0 {
-		log.Fatalf("no devices found")
-	}
-
-	dev := devs[0]
-	dev.Reset()
-	dev.ReadTimeout = (1 * time.Second)
-	dev.WriteTimeout = (1 * time.Second)
-	dev.ControlTimeout = (1 * time.Second)
-
-	log.Printf("Using device descriptor: ")
-	spew.Dump(dev.Descriptor)
-
-	cfg, err := dev.ActiveConfig()
+	// Claim the default interface using a convenience function.
+	// The default interface is always #0 alt #0 in the currently active
+	// config.
+	intf, done, err := dev.DefaultInterface()
 	if err != nil {
-		log.Fatalf("Cannot get active config: %s", err)
+		log.Fatalf("%s.DefaultInterface(): %v", dev, err)
 	}
-	log.Printf("Selecting config %d, endpoint 0x%x", cfg,
-		uint8(1)|uint8(usb.ENDPOINT_DIR_IN))
-	ep_read, err := dev.OpenEndpoint(cfg, uint8(0),
-		uint8(0), uint8(1)|uint8(usb.ENDPOINT_DIR_IN))
-	if err != nil {
-		log.Fatalf("Failed to open read endpoint: %s", err)
-	}
-	log.Printf("Got read endpoint: ")
-	spew.Dump(ep_read)
+	defer done()
 
-	ep_write, err := dev.OpenEndpoint(uint8(*config), uint8(0),
-		uint8(0), uint8(2)|uint8(usb.ENDPOINT_DIR_OUT))
+	// Open an IN endpoint.
+	ep_read, err := intf.InEndpoint(1)
 	if err != nil {
-		log.Fatalf("Failed to open write endpoint: %s", err)
+		log.Fatalf("%s.OutEndpoint(0): %v", intf, err)
 	}
-	log.Printf("Got write endpoint: ")
-	spew.Dump(ep_write)
+
+	// Open an OUT endpoint.
+	ep_write, err := intf.OutEndpoint(2)
+	if err != nil {
+		log.Fatalf("%s.OutEndpoint(0): %v", intf, err)
+	}
 
 	var buf []byte
 	// Read invalid bytes from device
@@ -141,7 +167,7 @@ func main() {
 	// request data step 1: send request command
 	buf = []byte("\x40\x68\x2a\x54\x52\x0a\x40\x40\x40\x40\x40\x40\x40\x40\x40\x40")
 	num, err = ep_write.Write(buf)
-	if err != nil {
+	if num != len(buf) {
 		log.Fatalf("Failed to write request command: %s", err)
 	}
 	spew.Printf("Request data - wrote %d bytes: % x\n", num, buf)

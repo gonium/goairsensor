@@ -2,23 +2,22 @@
 	"version": 0,
 	"dependencies": [
 		{
-			"importpath": "github.com/2sidedfigure/gousb/usb",
-			"repository": "https://github.com/2sidedfigure/gousb",
-			"revision": "4e9aa858e284be9be2aea781d8bfccb97c4a4285",
-			"branch": "detach-linux-kernel-driver",
-			"path": "/usb"
-		},
-		{
 			"importpath": "github.com/davecgh/go-spew/spew",
 			"repository": "https://github.com/davecgh/go-spew",
-			"revision": "5215b55f46b2b919f50a1df0eaa5886afe4e3b3d",
+			"revision": "adab96458c51a58dc1783b3335dcce5461522e75",
 			"branch": "master",
 			"path": "/spew"
 		},
 		{
+			"importpath": "github.com/google/gousb",
+			"repository": "https://github.com/google/gousb",
+			"revision": "bc91dd3f2c71ca4aba28505b7aa2c811fc852d5c",
+			"branch": "master"
+		},
+		{
 			"importpath": "github.com/kylelemons/gousb/usbid",
 			"repository": "https://github.com/kylelemons/gousb",
-			"revision": "b8ca4aadc7228a359fccd8ae4394eefcce29e7a8",
+			"revision": "99e7ca4f01738df8a0d994f04e6cc05f8bd51c5e",
 			"branch": "master",
 			"path": "/usbid"
 		}
